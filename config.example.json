@@ -1,41 +1,84 @@
 {
-  "node_id": "node-fra-01",
+  "node_id": "node-example",
   "name": "Frankfurt Core",
   "engines": [
-    { "name": "chameleon",  "enabled": true, "listen": "0.0.0.0:443" },
-    { "name": "reality",    "enabled": true, "listen": "0.0.0.0:8443" },
-    { "name": "phoenix-udp","enabled": true, "listen": "0.0.0.0:51820" },
-    { "name": "phantom",    "enabled": true, "listen": "0.0.0.0:53" }
+    {
+      "name": "chameleon",
+      "enabled": true,
+      "listen": "0.0.0.0:443"
+    },
+    {
+      "name": "reality",
+      "enabled": true,
+      "listen": "0.0.0.0:8443"
+    },
+    {
+      "name": "phoenix-udp",
+      "enabled": true,
+      "listen": "0.0.0.0:51820"
+    },
+    {
+      "name": "phantom",
+      "enabled": true,
+      "listen": "0.0.0.0:53"
+    }
   ],
   "chameleon": {
     "enabled": true,
-    "fake_snis": ["www.google.com", "www.cloudflare.com", "cdn.jsdelivr.net"],
-    "fragment_offsets": [2, 5, 1, 3],
+    "fake_snis": [
+      "www.google.com",
+      "www.microsoft.com",
+      "cdn.jsdelivr.net"
+    ],
+    "fragment_offsets": [
+      2,
+      5,
+      1,
+      3
+    ],
     "early_silence_packets": 3,
     "cover_enabled": true,
     "cover_min_bytes": 256,
     "cover_max_bytes": 1400,
+    "fingerprint_db": "",
     "mimic_profile": "chrome-android"
   },
-  "hydra": { "enabled": true, "channels": 4, "frame_size": 1200, "fec_k": 8, "fec_n": 12 },
+  "hydra": {
+    "enabled": true,
+    "channels": 4,
+    "frame_size": 1200,
+    "fec_k": 8,
+    "fec_n": 12,
+    "weights": null
+  },
   "phantom": {
     "enabled": true,
-    "domain": "ns1.tunnel-example.com",
-    "dga_seed": "CHANGE-ME-64-HEX",
+    "domain": "ns1.example.com",
+    "dga_seed": "CHANGE-ME",
     "rotate_minutes": 10,
-    "resolvers_up": ["1.1.1.1:53", "8.8.8.8:53"],
-    "resolvers_down": ["internal-dns:53"],
+    "resolvers_up": [
+      "1.1.1.1:53",
+      "8.8.8.8:53"
+    ],
+    "resolvers_down": null,
     "max_sessions": 8
   },
-  "rotation": { "enabled": true, "interval_minutes": 30 },
-  "fallback": { "probe_interval_seconds": 3, "failure_threshold": 0.6 },
-  "reverse_tunnels": [
-    { "name": "ir-cdn-pull", "type": "cdn-pull", "endpoint": "185.x.x.x:443", "secret": "SECRET" }
-  ],
+  "rotation": {
+    "enabled": true,
+    "interval_minutes": 30
+  },
+  "fallback": {
+    "probe_interval_seconds": 3,
+    "failure_threshold": 0.6
+  },
+  "reverse_tunnels": null,
   "keys": {
     "static_pub": "",
-    "static_priv": "CHANGE-ME-32-BYTES-BASE64",
+    "static_priv": "CHANGE-ME (phoenix-server -init generates a random key)",
     "pq_enabled": false
   },
-  "meta": { "panel_url": "", "agent_token": "", "camouflage": "www.example.com:443" }
+  "meta": {
+    "camouflage": "www.microsoft.com:443",
+    "public_host": "YOUR.SERVER.IP"
+  }
 }

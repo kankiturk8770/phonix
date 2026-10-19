@@ -1,0 +1,5 @@
+/bin/
+/dist/
+*.tar.gz
+panel-data/
+android-app/local.properties

@@ -1,110 +1,106 @@
-# 🐦‍🔥 PhoenixTunnel — هسته سرور + پنل کنترل
+# 🔥 PhoenixTunnel (ققنوس)
 
-پلتفرم ضد-DPI و دور زدن فیلترینگ برای سخت‌ترین شبکه‌های دنیا.
-این مخزن شامل **هسته لینوکس سرور**، **ایجنت نود**، و **پنل فوق پیشرفته کنترل** است.
-اپلیکیشن اندروید در مخزن جدا (`phoenix-android`) — این اسکلت دقیقاً APIهایی که پنل و هسته اینجا expose می‌کنند را مصرف می‌کند.
+تونل ضد-DPI و ضد فیلتر: **هسته‌ی سرور لینوکس** + **پنل وب** + **اپ اندروید**. هر سه از همین مخزن ساخته می‌شوند و با GitHub Actions بیلد می‌شوند.
 
-## ساختار
+## اتصال اپ به سرور چطور کار می‌کند؟
+
 ```
-core/      موتور مشترک: engine registry، رمزنگاری قاب، Chameleon-SNI، HydraMUX، PhantomDNS، fallback
-server/    دیمون سرور لینوکس + فایل systemd
-panel/     پنل کنترل: API کامل + داشبورد وب فارسی تعبیه‌شده (single-binary)
-cmd/       سه باینری: phoenix-server / phoenix-agent / phoenix-panel
+گوشی (اپ PhoenixTunnel)  ──Chameleon/TCP:443 یا PhoenixUDP:51820──▶  سرور لینوکس  ──▶  اینترنت
+          ▲
+          └── لینک phoenix://…  (یا QR)  ← سرور بعد از نصب می‌سازد / پنل نشان می‌دهد
 ```
 
-## سه باینری
-| باینری | نقش |
+۱. اسکریپت نصب را روی سرور اجرا می‌کنید. سرور یک **کلید تصادفی** می‌سازد و یک **لینک `phoenix://` + QR کد** چاپ می‌کند.
+۲. در اپ روی «افزودن از کلیپ‌بورد» می‌زنید (یا QR را اسکن می‌کنید، یا روی لینک در تلگرام می‌زنید).
+۳. همه‌ی تنظیمات (آدرس، پورت، کلید، SNIهای تقلبی، موتور) خودکار وارد می‌شود. دکمه‌ی بزرگ را می‌زنید و وصل می‌شوید.
+
+لینک فقط یک JSON است که با base64 کد شده:
+`{"server":"IP:443","keys":"…","engine":"chameleon","fake_snis":[…],"udp_server":"IP:51820"}`
+
+## نصب سرور (یک دستور)
+
+روی سرور Ubuntu/Debian/CentOS با کاربر root:
+
+```bash
+bash <(curl -fsSL https://github.com/kankiturk8770/phonix/releases/latest/download/install.sh)
+```
+
+اسکریپت نصب این کارها را انجام می‌دهد:
+- باینری‌ها را نصب می‌کند و یک پروفایل با کلید تصادفی و گواهی می‌سازد.
+- سرویس‌های systemd را راه می‌اندازد.
+- پورت 53 را از systemd-resolved آزاد می‌کند تا موتور DNS بالا بیاید.
+- فایروال را باز می‌کند و BBR را فعال می‌کند.
+- در پایان **لینک اتصال + QR** و **آدرس و رمز پنل** را چاپ می‌کند.
+
+گزینه‌ها: `--host <IP یا دامنه>`، `--port 443`، `--udp-port 51820`، `--panel-port 2053`، `--no-panel`، `--uninstall`، `--local file.tar.gz` (نصب آفلاین).
+
+دستورات بعد از نصب:
+
+| دستور | کار |
 |---|---|
-| `phoenix-server` | اجرای مستقیم هسته با پروفایل JSON |
-| `phoenix-agent` | نصب روی هر نود؛ پروفایل را از پنل می‌گیرد، هسته را اجرا می‌کند، آمار می‌فرستد، فرمان قبول می‌کند |
-| `phoenix-panel` | پنل وب (داشبورد فارسی RTL) + API کامل |
+| `phoenix link` | نمایش دوباره‌ی لینک و QR |
+| `phoenix status` | وضعیت سرویس‌ها |
+| `phoenix logs` | لاگ زنده |
+| `phoenix restart` | راه‌اندازی مجدد |
+| `phoenix panel` | آدرس و رمز پنل |
+| `phoenix passwd <رمز>` | تغییر رمز پنل |
 
-## استقرار سرور
-```bash
-sudo install -m755 bin/phoenix-server /usr/local/bin/
-sudo install -m644 server/systemd/phoenix.service /etc/systemd/system/
-sudo mkdir -p /etc/phoenix /var/lib/phoenix
-sudo cp config.example.json /etc/phoenix/profile.json   # ویرایش: کلید، دامنه، SNIهای تقلبی
-sudo systemctl enable --now phoenix
+پورت‌ها: `443/tcp` (Chameleon)، `8443/tcp` (Reality)، `51820/udp` (PhoenixUDP)، `53/udp+tcp` (PhantomDNS)، `2053/tcp` (پنل HTTPS).
+
+## پنل وب
+
+`https://IP:2053`. گواهی پنل self-signed است، پس در مرورگر «Advanced → Proceed» را بزنید.
+- **این سرور:** وضعیت هسته، اتصال‌های فعال، ترافیک هر موتور، و لینک + QR برای اپ.
+- **نودها:** سرورهای دیگری که با `phoenix-agent` به این پنل وصل می‌شوند. برای هر نود لینک، QR و دستور نصب ایجنت (با pin گواهی) نمایش داده می‌شود.
+- **تنظیمات:** تغییر رمز و افزودن کاربر.
+
+## اپ اندروید
+
+فایل `PhoenixTunnel.apk` را از [Releases](https://github.com/kankiturk8770/phonix/releases/latest) نصب کنید (اندروید ۷ به بالا).
+- افزودن سرور: Paste لینک، اسکن QR، یا باز کردن لینک `phoenix://` از هر اپی.
+- انتخاب موتور: **Chameleon (TCP)** که پیش‌فرض و پیشنهادی است، یا **PhoenixUDP** که آزمایشی است.
+- همه‌ی ترافیک TCP گوشی و DNS از داخل تونل می‌رود. QUIC (UDP:443) مسدود می‌شود تا مرورگرها به TCP داخل تونل برگردند.
+- دکمه‌ی «تست»: یک اتصال واقعی به سرور می‌زند و زمان آن را نشان می‌دهد.
+- کاشی Quick Settings برای روشن/خاموش کردن سریع.
+- Always-on VPN سیستم پشتیبانی می‌شود.
+
+## ساختار مخزن
+
+```
+core/        موتور مشترک: رمزنگاری، قاب‌بندی، Chameleon-SNI، FEC، fallback، لینک phoenix://
+server/      موتورهای سرور: chameleon، reality، phoenix-udp، phantom (DNS)
+client/      کلاینت‌ها + VPN (پشته‌ی gVisor netstack) + پاسخ‌گوی DNS داخل تونل
+mobile/      رابط gomobile برای اندروید (ir.phoenix.core.mobile.Mobile)
+panel/       پنل وب (API + داشبورد فارسی تعبیه‌شده)
+cmd/         phoenix-server / phoenix-panel / phoenix-agent
+deploy/      install.sh
+android-app/ اپ Kotlin
 ```
 
-## استقرار پنل
-```bash
-./bin/phoenix-panel -listen 0.0.0.0:8080 -data /var/lib/phoenix-panel \
-    -admin-user admin -admin-pass 'رمز-قوی'
-```
-سپس در مرورگر: `http://IP:8080` — ورود، ساخت نود، دریافت `agent_token`.
+## بیلد
 
-## اتصال ایجنت نود به پنل
-```bash
-./bin/phoenix-agent -panel https://panel.example.com:8080 \
-    -token <agent_token از پنل> -node <node_id>
-```
+همه چیز در GitHub Actions بیلد می‌شود (`.github/workflows/build.yml`). خروجی‌ها در Release قرار می‌گیرند:
+- `phoenix-linux-amd64.tar.gz` و `phoenix-linux-arm64.tar.gz`
+- `PhoenixTunnel.apk`
+- `install.sh`
 
-## جریان کنترل
-```
-پنل → (ساخت نود/اینباند، تعویض موتور، فرمان)
-ایجنت → دریافت پروفایل، اجرای هسته، گزارش آمار هر ۱۰ ثانیه، دریافت فرمان سوئیچ موتور
-fallback داخل هسته → پروب هر ۳ ثانیه، تشخیص RST/timeout/TLS-alert، سوئیچ خودکار chameleon → hydra → phantom
-```
+بیلد دستی:
 
-## پروتکل‌های پیاده‌شده در هسته (همه با تست سرتاسری)
-
-| پروتکل | توضیح | تست |
-|---|---|---|
-| **Chameleon-TLS** | handshake احراز هویت، قاب رمزنگاری‌شده، cover traffic، early-silence | ✅ e2e (داده رد و بدل می‌شود) |
-| **Reality-Lite** | پروبر/مرورگر ناشناس → پروکسی خام به سایت استتار؛ کلاینت PHX1 → تونل | ✅ camouflage test |
-| **PhoenixUDP** | پروتکل اختصاصی UDP: HELLO/ACCEPT با HMAC، ARQ بازارسال تطبیقی، padding ضد تشخیص | ✅ e2e (اکو برمی‌گردد) |
-| **PhantomDNS** | سر DNS کامل (وایرفرمت بدون وابستگی)، DGA چرخان، پاسخ TXT، camouflage با forward به upstream برای دامنه‌های خارجی | ✅ e2e |
-| **HydraMUX** | مالتی‌پلکسر round-robin وزن‌دار بین کانال‌ها | ✅ |
-| **FEC** | XOR FEC با پوشش کامل هر گم‌شدگی تکی در گروه | ✅ unit |
-| **FallbackEngine** | پروب هر ۳ ثانیه، پنجره‌ی لغزان، تشخیص RST/timeout/TLS-alert، سوئیچ خودکار موتور | ✅ |
-
-لایه رمزنگاری مشترک: handshake کوتاه چالش-پاسخ، AES-GCM با nonce صریح، anti-replay، padding حداقلی ۱۲۸ بایت.
-
-## تست‌ها
 ```bash
 go test ./...
-# server: TestChameleonEndToEnd, TestRealityCamouflage, TestPhantomDNSQuery,
-#         TestPhantomUpstreamCamouflage, TestPhoenixUDPEndToEnd
-# core:   TestFECRecoverSingleLoss, TestTargetCodec
+go build -o bin/ ./cmd/...
+
+# اندروید
+gomobile bind -target=android -androidapi 24 -javapkg ir.phoenix.core -o android-app/app/libs/phoenix.aar ./mobile
+cd android-app && ./gradlew assembleRelease
 ```
 
-## بیلد از سورس
-```bash
-go build -o bin/ ./...
-```
+### امضای ثابت APK (اختیاری)
 
-## کلاینت و اندروید (client/ + android-app/)
+اگر این Secretها را در GitHub تعریف کنید، APK با کلید شما امضا می‌شود و آپدیت‌ها بدون حذف اپ نصب می‌شوند:
+- `ANDROID_KEYSTORE_BASE64`: خروجی `base64 -w0 release.jks`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
 
-پکیج `client` کلاینت‌های کامل است — همه با تست سرتاسری در برابر سرور واقعی:
-
-| کلاینت | توضیح | تست |
-|---|---|---|
-| DialChameleon | early-silence + decoy SNI + handshake + تونل | ✅ |
-| DialPhoenixUDP | HELLO/ACCEPT + ARQ + مرتب‌سازی seq | ✅ |
-| SOCKS5 سرور محلی | هر CONNECT → تونل | ✅ |
-| tuntcp پشته TCP/IPv4 | TUN↔TCP کامل (بدون وابستگی) | ✅ |
-| VPN glue | TUN → stack → dialer → تونل | ✅ e2e کامل |
-| mobile.go | API گو موبایل: StartVPN/StopVPN/WaitVPN | — |
-
-### بیلد AAR برای اندروید
-```bash
-go install golang.org/x/mobile/cmd/gomobile@latest
-gomobile init
-gomobile bind -target=android -javapkg ir.phoenix.core \
-    -o android-app/app/libs/phoenix.aar \
-    github.com/phoenixtunnel/phoenix/client
-```
-
-### اپ اندروید (android-app/)
-اپ کامل Kotlin: `PhoenixVpnService` (VpnService + TUN + foreground service)،
-`MainActivity` (ورود سرور/کلید + درخواست مجوز VPN)، پل `Phoenix.kt` به AAR.
-بیلد در Android Studio یا `./gradlew assembleDebug`.
-
-## نقشه‌ی راه بعدی
-1. ProtectCallback واقعی در gomobile (VpnService.protect برای هر سوکت)
-2. DNS سمت برگشت PhantomDNS (پاسخ poll از سرور به کلاینت)
-3. Hysteria2 + WebRTC کانال چهارم HydraMUX
-4. Mimicry Rotation Engine + بانک fingeprint
-5. پنل: ساخت کانفیگ کلاینت + QR
+اگر این Secretها نباشند، APK با کلید debug امضا می‌شود. در این حالت برای نصب نسخه‌ی جدید باید اول نسخه‌ی قبلی را حذف کنید.

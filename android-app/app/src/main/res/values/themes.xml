@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Phoenix" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/fire</item>
+        <item name="colorOnPrimary">#1A0B06</item>
+        <item name="colorSecondary">@color/gold</item>
+        <item name="colorTertiary">@color/fire2</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/txt</item>
+        <item name="colorSurfaceContainer">@color/surface2</item>
+        <item name="colorSurfaceContainerHigh">@color/surface2</item>
+        <item name="colorSurfaceContainerLow">@color/surface</item>
+        <item name="colorOutline">@color/line</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="colorControlNormal">@color/txt</item>
+        <item name="android:windowBackground">@drawable/bg_main</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="bottomSheetDialogTheme">@style/Phoenix.BottomSheet</item>
+    </style>
+    <style name="Phoenix.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Phoenix.BottomSheet.Modal</item>
+    </style>
+    <style name="Phoenix.BottomSheet.Modal" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="backgroundTint">@color/surface</item>
+    </style>
+    <style name="Phoenix.Action" parent="Widget.Material3.Button.TonalButton">
+        <item name="backgroundTint">@color/surface2</item>
+        <item name="android:textColor">@color/txt</item>
+        <item name="iconTint">@color/gold</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="strokeColor">@color/line</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:minHeight">56dp</item>
+    </style>
+</resources>

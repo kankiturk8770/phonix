@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#0A0710</color>
+    <color name="surface">#17101F</color>
+    <color name="surface2">#1E1528</color>
+    <color name="line">#2C2038</color>
+    <color name="txt">#F4EEFB</color>
+    <color name="dim">#A597B5</color>
+    <color name="fire">#FF6A1A</color>
+    <color name="fire2">#FF2D55</color>
+    <color name="gold">#FFC145</color>
+    <color name="ok">#2EE59D</color>
+    <color name="bad">#FF4D6D</color>
+</resources>

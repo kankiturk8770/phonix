@@ -113,7 +113,6 @@ func (s *Stack) Deliver(pkt []byte) [][]byte {
 		s.drop(q)
 		return [][]byte{c.ackPkt()}
 	case flags&0x10 != 0 && len(payload) > 0: // ACK+data
-		println("TUNTCP data seq=", seq, "len=", len(payload))
 		c.onData(seq, payload)
 		// ACK داده‌ی دریافتی (حتی out-of-order هم ACK می‌دهیم)
 		return [][]byte{c.ackPkt()}
@@ -185,7 +184,6 @@ func (c *Conn) ackPkt() []byte {
 }
 
 func (c *Conn) onData(seq uint32, payload []byte) {
-	println("TUNTCP.onData", seq, len(payload))
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state == 0 {
@@ -256,7 +254,6 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write داده به سمت اپ (از تونل می‌آید)
 func (c *Conn) Write(b []byte) (int, error) {
-	println("TUNTCP.Write", len(b))
 	select {
 	case <-c.closed:
 		return 0, ioEOF

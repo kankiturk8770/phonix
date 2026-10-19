@@ -3,6 +3,8 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+def envOr = { String k, String d -> System.getenv(k) ?: d }
+
 android {
     namespace 'ir.phoenix.tunnel'
     compileSdk 34
@@ -11,15 +13,31 @@ android {
         applicationId "ir.phoenix.tunnel"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "0.1.0"
+        versionCode envOr("VERSION_CODE", "1").toInteger()
+        versionName envOr("VERSION_NAME", "1.0.0")
+    }
+
+    signingConfigs {
+        // امضای ثابت از GitHub Secrets (اختیاری): ANDROID_KEYSTORE_FILE / _PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD
+        release {
+            def ks = System.getenv("ANDROID_KEYSTORE_FILE")
+            if (ks != null && file(ks).exists()) {
+                storeFile file(ks)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            def releaseKs = System.getenv("ANDROID_KEYSTORE_FILE")
+            def useReleaseKey = releaseKs != null && file(releaseKs).exists()
+            signingConfig = useReleaseKey ? signingConfigs.release : signingConfigs.debug
         }
     }
     compileOptions {
@@ -27,14 +45,18 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = '17' }
+    buildFeatures { buildConfig true }
+    packagingOptions {
+        jniLibs { useLegacyPackaging true }
+    }
 }
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'com.google.android.material:material:1.12.0'
-    // AAR هسته‌ی Go — تولید:
-    // gomobile bind -target=android -javapkg ir.phoenix.core \
-    //   -o android-app/app/libs/phoenix.aar github.com/phoenixtunnel/phoenix/client
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    // AAR هسته‌ی Go — تولید: gomobile bind -target=android -javapkg ir.phoenix.core -o app/libs/phoenix.aar ../mobile
     implementation files('libs/phoenix.aar')
 }

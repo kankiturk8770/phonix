@@ -1,0 +1,135 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VERSION: "1.0.0"
+
+jobs:
+  test:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  server:
+    name: Linux server (${{ matrix.arch }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build binaries
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          V="${VERSION}-${GITHUB_RUN_NUMBER}"
+          mkdir -p dist/phoenix/bin
+          go build -trimpath -ldflags "-s -w -X main.version=$V" -o dist/phoenix/bin/ ./cmd/phoenix-server ./cmd/phoenix-panel ./cmd/phoenix-agent
+          cp deploy/install.sh config.example.json README.md dist/phoenix/
+          tar -C dist -czf phoenix-linux-${{ matrix.arch }}.tar.gz phoenix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-linux-${{ matrix.arch }}
+          path: phoenix-linux-${{ matrix.arch }}.tar.gz
+
+  android:
+    name: Android APK
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install NDK
+        run: |
+          yes | sdkmanager "ndk;26.3.11579264" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/26.3.11579264" >> $GITHUB_ENV
+      - name: Build Go core (gomobile AAR)
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile golang.org/x/mobile/cmd/gobind
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          gomobile init
+          mkdir -p android-app/app/libs
+          gomobile bind -target=android/arm,android/arm64,android/amd64 -androidapi 24 \
+            -javapkg ir.phoenix.core -trimpath \
+            -ldflags "-s -w -X github.com/phoenixtunnel/phoenix/mobile.version=${VERSION}-${GITHUB_RUN_NUMBER}" \
+            -o android-app/app/libs/phoenix.aar ./mobile
+      - name: Decode signing key (optional secret)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> $GITHUB_ENV
+          fi
+      - name: Build APK
+        working-directory: android-app
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ env.VERSION }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../PhoenixTunnel.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoenixTunnel-apk
+          path: PhoenixTunnel.apk
+
+  release:
+    name: Publish release
+    needs: [server, android]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Create / update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp deploy/install.sh out/install.sh
+          ls -la out
+          TAG="v${VERSION}"
+          NOTES="PhoenixTunnel ${VERSION} (build ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA::7})
+
+          **نصب سرور لینوکس (یک دستور):**
+          \`\`\`
+          bash <(curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh)
+          \`\`\`
+          **اپ اندروید:** فایل PhoenixTunnel.apk را نصب کنید، سپس لینک phoenix:// را Paste یا QR را اسکن کنید."
+          gh release delete "$TAG" --cleanup-tag -y 2>/dev/null || true
+          gh release create "$TAG" out/* --title "PhoenixTunnel ${VERSION}" --notes "$NOTES" --target "$GITHUB_SHA" --latest

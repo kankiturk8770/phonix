@@ -185,3 +185,6 @@ func (s *Server) reportLoop(ctx context.Context) {
 		}
 	}
 }
+
+// Stats آمار زنده‌ی همه‌ی موتورها (برای پنل/ایجنت)
+func (s *Server) Stats() []core.Stats { return s.reg.AllStats() }

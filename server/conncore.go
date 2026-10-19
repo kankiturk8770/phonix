@@ -38,3 +38,11 @@ func (c *countConn) Write(b []byte) (int, error) {
 	}
 	return n, err
 }
+
+// CloseWrite نیم‌بستن سمت مقصد (FIN) وقتی کلاینت ارسال را تمام کرد
+func (c *countConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return nil
+}

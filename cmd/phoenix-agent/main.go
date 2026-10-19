@@ -6,13 +6,19 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,6 +39,8 @@ func main() {
 	flag.StringVar(&cfg.Token, "token", "", "agent token")
 	flag.StringVar(&cfg.NodeID, "node", "", "node id (empty = register)")
 	flag.DurationVar(&cfg.Interval, "interval", 10*time.Second, "report interval")
+	workDir := flag.String("workdir", "/var/lib/phoenix-agent", "working dir (certs/ is created here)")
+	pin := flag.String("pin", "", "sha256 fingerprint of the panel's self-signed TLS certificate (hex)")
 	flag.Parse()
 
 	if cfg.Token == "" {
@@ -44,6 +52,23 @@ func main() {
 	defer stop()
 
 	a := &agent{cfg: cfg, client: &http.Client{Timeout: 15 * time.Second}}
+	if *pin != "" {
+		// پنل با گواهی self-signed: به‌جای CA، اثرانگشت گواهی بررسی می‌شود
+		want := strings.ToLower(strings.ReplaceAll(*pin, ":", ""))
+		a.client.Transport = &http.Transport{TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
+				if len(raw) == 0 {
+					return errors.New("no panel certificate")
+				}
+				sum := sha256.Sum256(raw[0])
+				if hex.EncodeToString(sum[:]) != want {
+					return errors.New("panel certificate fingerprint mismatch")
+				}
+				return nil
+			},
+		}}
+	}
 
 	// ۱) ثبت نود یا بازیابی پروفایل
 	profile, err := a.fetchProfile(ctx)
@@ -52,7 +77,20 @@ func main() {
 	}
 	log.Printf("agent ready — node %q (%d engines)", profile.Name, len(profile.Engines))
 
-	// ۲) اجرای هسته با پروفایل
+	// ۲) اجرای هسته با پروفایل (certs/ در workdir ساخته می‌شود)
+	if err := os.MkdirAll(*workDir, 0o700); err != nil {
+		log.Fatalf("workdir: %v", err)
+	}
+	if err := os.Chdir(*workDir); err != nil {
+		log.Fatalf("workdir: %v", err)
+	}
+	sni := ""
+	if len(profile.Chameleon.FakeSNIs) > 0 {
+		sni = profile.Chameleon.FakeSNIs[0]
+	}
+	if err := server.EnsureCerts(".", sni); err != nil {
+		log.Fatalf("certs: %v", err)
+	}
 	coreServer := server.New(profile)
 	go func() {
 		if err := coreServer.Run(ctx); err != nil {
@@ -61,7 +99,7 @@ func main() {
 	}()
 
 	// ۳) حلقه‌ی گزارش + دریافت فرمان‌های پنل
-	a.loop(ctx, profile)
+	a.loop(ctx, coreServer)
 }
 
 type agent struct {
@@ -119,16 +157,15 @@ func (a *agent) report(ctx context.Context, stats []core.Stats) error {
 	return nil
 }
 
-func (a *agent) loop(ctx context.Context, p *core.Profile) {
+func (a *agent) loop(ctx context.Context, srv *server.Server) {
 	t := time.NewTicker(a.cfg.Interval)
 	defer t.Stop()
-	// stats واقعی از هسته در نسخه‌ی کامل تزریق می‌شود
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := a.report(ctx, nil); err != nil {
+			if err := a.report(ctx, srv.Stats()); err != nil {
 				log.Printf("report: %v", err)
 			}
 		}
@@ -138,5 +175,3 @@ func (a *agent) loop(ctx context.Context, p *core.Profile) {
 type errStatus int
 
 func (e errStatus) Error() string { return fmt.Sprintf("panel status %d", int(e)) }
-
-var _ = os.Getenv // reserved

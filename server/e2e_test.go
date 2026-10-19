@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -18,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phoenixtunnel/phoenix/client"
 	"github.com/phoenixtunnel/phoenix/core"
 )
 
@@ -59,7 +61,7 @@ func echoServer(t *testing.T) net.Addr {
 			if err != nil {
 				return
 			}
-			go io.Copy(c, c)
+			go func(c net.Conn) { io.Copy(c, c); c.Close() }(c)
 		}
 	}()
 	t.Cleanup(func() { ln.Close() })
@@ -268,60 +270,36 @@ func TestPhoenixUDPEndToEnd(t *testing.T) {
 		}
 	}()
 
-	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+	// کلاینت واقعی: HELLO/ACCEPT + رمز AES-GCM + ARQ + EOF
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, err := client.DialPhoenixUDP(ctx, client.PUDPConf{Server: pc.LocalAddr().String(), Keys: testKey}, echo.String())
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("dial: %v", err)
 	}
 	defer c.Close()
-
-	sessID := uint32(0xDEADBEEF)
-	salt := make([]byte, 32)
-	randomRead(salt)
-	hello := make([]byte, hdrLen+48)
-	hello[0], hello[1], hello[2], hello[3] = pxMagic0, pxMagic1, pxVer, tHello
-	binary.BigEndian.PutUint32(hello[4:8], sessID)
-	copy(hello[hdrLen:], salt)
-	mac := hmacSHA256(testKey, salt)
-	copy(hello[hdrLen+32:], mac[:16])
-	c.WriteTo(padDatagram(hello), pc.LocalAddr())
-
-	// ACCEPT
-	c.SetReadDeadline(time.Now().Add(3 * time.Second))
-	buf := make([]byte, 4096)
-	n, _, err := c.ReadFrom(buf)
-	if err != nil || buf[3] != tAccept {
-		t.Fatalf("accept: n=%d type=%d err=%v", n, buf[3], err)
-	}
-
-	// DATA seq0 = target, seq1 = payload
-	tgt, _ := core.EncodeTarget(echo.String())
-	sendData := func(seq uint32, p []byte) {
-		d := make([]byte, hdrLen+len(p))
-		d[0], d[1], d[2], d[3] = pxMagic0, pxMagic1, pxVer, tData
-		binary.BigEndian.PutUint32(d[4:8], sessID)
-		binary.BigEndian.PutUint32(d[8:12], seq)
-		binary.BigEndian.PutUint32(d[12:16], uint32(len(p)))
-		copy(d[hdrLen:], p)
-		c.WriteTo(padDatagram(d), pc.LocalAddr())
-	}
-	sendData(0, tgt)
-	time.Sleep(200 * time.Millisecond)
-	sendData(1, []byte("udp-echo-test"))
-
-	// خواندن دیتاگرام‌های سرور تا پیدا کردن داده‌ی برگشتی
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		c.SetReadDeadline(deadline)
-		n, _, err = c.ReadFrom(buf)
-		if err != nil {
-			t.Fatalf("no udp echo back: %v", err)
+	msg := make([]byte, 200000)
+	randomRead(msg)
+	go c.Write(msg)
+	got := make([]byte, len(msg))
+	c.(interface{ SetReadDeadline(time.Time) error }).SetReadDeadline(time.Now().Add(10 * time.Second))
+	done := make(chan error, 1)
+	go func() { _, err := io.ReadFull(c, got); done <- err }()
+	select {
+	case err := <-done:
+		if err != nil || string(got) != string(msg) {
+			t.Fatalf("udp echo mismatch: %v", err)
 		}
-		if n >= hdrLen && buf[3] == tData {
-			l := int(binary.BigEndian.Uint32(buf[12:16]))
-			if string(buf[hdrLen:hdrLen+l]) == "udp-echo-test" {
-				break
-			}
-		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("udp echo timeout")
+	}
+	// EOF: نیم‌بستن کلاینت → سرور مقصد را می‌بندد → EOF به کلاینت برمی‌گردد
+	c.(interface{ CloseWrite() error }).CloseWrite()
+	go func() { _, err := io.ReadAll(c); done <- err }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no EOF over phoenix-udp")
 	}
 	fmt.Println("phoenix-udp end-to-end OK")
 }
