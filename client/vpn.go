@@ -186,6 +186,11 @@ func (v *VPN) onTCP(r *tcp.ForwarderRequest) {
 
 	var up net.Conn
 	var err error
+	if id.LocalAddress.String() == VirtualDNS && id.LocalPort != 53 {
+		// مثلاً DNS-over-TLS (853) اندروید به DNS مجازی: سریع رد کن تا به DNS معمولی برگردد
+		r.Complete(true)
+		return
+	}
 	if id.LocalPort == 53 && id.LocalAddress.String() == VirtualDNS {
 		// DNS-over-TCP به DNS مجازی → به upstream واقعی از داخل تونل
 		up, err = v.dial(v.DNSUpstream)
