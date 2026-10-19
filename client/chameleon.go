@@ -31,6 +31,10 @@ func DialChameleon(ctx context.Context, conf ChameleonConf, target string) (net.
 	if ok {
 		tc.SetNoDelay(true)
 	}
+	// سقف زمان برای handshake (بدون آن، سروری که جواب ندهد اتصال را تا ابد معطل می‌کند)
+	if dl, ok := ctx.Deadline(); ok {
+		conn.SetDeadline(dl)
+	}
 
 	// early-silence: پکت‌های جعلی با SNI مجاز (TTL کم — فقط میانجی می‌بیند)
 	// ساختار: TLS ClientHello جعلی کوتاه با SNI تقلبی + پکت‌های خاموش
@@ -60,6 +64,7 @@ func DialChameleon(ctx context.Context, conf ChameleonConf, target string) (net.
 		conn.Close()
 		return nil, err
 	}
+	conn.SetDeadline(time.Time{})
 	return &core.FrameConn{Conn: conn, Sess: sess}, nil
 }
 

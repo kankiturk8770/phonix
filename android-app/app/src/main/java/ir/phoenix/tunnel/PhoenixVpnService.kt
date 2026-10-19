@@ -64,7 +64,10 @@ class PhoenixVpnService : VpnService() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (VpnState.isActive) return START_STICKY
+        // فقط اگر واقعاً یک تونل در حال اجراست رد شود؛ Activity/Tile وضعیت
+        // CONNECTING را قبل از رسیدن به اینجا تنظیم می‌کنند (قبلاً همین باعث می‌شد
+        // تونل هرگز شروع نشود و اپ روی «در حال اتصال» بماند)
+        if (coreThread?.isAlive == true) return START_STICKY
         userStopped = false
         VpnState.serverName = name
         VpnState.error = null
